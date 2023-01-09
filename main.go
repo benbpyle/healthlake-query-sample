@@ -21,6 +21,7 @@ var (
 	signer              *v4.Signer
 )
 
+// init sets up config from the env as well as global vars
 func init() {
 	healthlakeEndpoint = os.Getenv("ENDPOINT")
 	healthlakeDatastore = os.Getenv("DATASTORE")
@@ -33,8 +34,10 @@ func init() {
 	log.SetFormatter(&log.JSONFormatter{PrettyPrint: true})
 }
 
+// main is the standard entry point into the application
 func main() {
 	log.Printf("Fetching a batch of patients")
+	// fetching a bundle of patients.  Bundle is a FHIR specific Resource
 	bundle, err := getPatients()
 	if err != nil {
 		log.WithFields(log.Fields{
@@ -42,10 +45,13 @@ func main() {
 		}).Fatalln("error fetching patient batch")
 	}
 
+	// loop the Bundle's Entries
 	for _, e := range bundle.Entry {
 		var p fhir.Patient
 		_ = json.Unmarshal(e.Resource, &p)
 		log.Printf("Fetching a single patient with an id of: (%s)", *p.Id)
+		// grab a single patient by id.  Patient is a FHIR resource
+		// the Healthlake API is REST so the ID makes the Resource
 		patient, err := getPatientById(*p.Id)
 		if err != nil {
 			log.WithFields(log.Fields{
@@ -61,6 +67,8 @@ func main() {
 
 }
 
+// getPatients fetches a FHIR Bundle based upon query parameters
+// in the below implementation, there is nothing being passed in
 func getPatients() (*fhir.Bundle, error) {
 	url := fmt.Sprintf("https://%s/%s/r4/Patient", healthlakeEndpoint, healthlakeDatastore)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -70,6 +78,7 @@ func getPatients() (*fhir.Bundle, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	// the request must by V4 signed
 	_, _ = signer.Sign(req, nil, "healthlake", "us-west-2", time.Now())
 
 	resp, err := httpClient.Do(req)
@@ -87,6 +96,7 @@ func getPatients() (*fhir.Bundle, error) {
 	return &bundle, err
 }
 
+// getPatientById fetches a FHIR Patient based upon the ID supplied
 func getPatientById(id string) (*fhir.Patient, error) {
 	url := fmt.Sprintf("https://%s/%s/r4/Patient/%s", healthlakeEndpoint, healthlakeDatastore, id)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
